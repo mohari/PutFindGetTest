@@ -27,6 +27,18 @@ import com.hazelcast.client.config.XmlClientConfigBuilder;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.IMap;
 import com.rlab.hazelcast.utils.Utils;
+
+/**
+ * SimplePutGetClientServerNC
+ * This class runs a Hazelcast client which connects to an
+ * existing cluster and measures the performance of 
+ * PUT , find/getAll  and Get operations on 
+ * IMAP 
+ * Use NearCache for best results
+ * 
+ * @author Riaz
+ *
+ */
 public class SimplePutGetClientServerNC {
     
 	HazelcastInstance hz ;

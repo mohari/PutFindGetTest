@@ -30,6 +30,16 @@ import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.IMap;
 import com.rlab.hazelcast.utils.Utils;
+
+/**
+ * SimplePutGetEmbedded
+ * This class runs a hazelcast server node and 
+ * measures performance of put and get operations on
+ * IMap
+ * See constructor for parameters
+ * @author Riaz
+ *
+ */
 public class SimplePutGetEmbedded {
 
 	HazelcastInstance hz ;
