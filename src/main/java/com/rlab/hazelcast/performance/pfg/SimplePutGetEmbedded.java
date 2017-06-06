@@ -24,28 +24,20 @@ import org.apache.commons.lang3.RandomUtils;
 import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.client.config.XmlClientConfigBuilder;
+import com.hazelcast.config.Config;
+import com.hazelcast.config.FileSystemXmlConfig;
+import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.IMap;
 import com.rlab.hazelcast.utils.Utils;
-/**
- * Run with VM options  -Xms4G -Xmx4G -XX:+UseG1GC  set heapsize as appropriate
- * @author Riaz
- *
- */
-public class SimplePutFindGetTestClient {
+public class SimplePutGetEmbedded {
 
 	HazelcastInstance hz ;
-	private static final int KB = 10240;
-	
+	private static final int KB = 1024;
 	IMap<String, Object> map = null;
-	
-	ConcurrentHashMap<String,Object> results = new ConcurrentHashMap<String,Object>();
 	HashMap<String,Future<Long>> stats;
-	List <Future<Long>> findStats;
 	List<Long> taskDuration = new ArrayList<Long>();
-	
 	CountDownLatch cdl;
-	
 	int noOfThreads,findChunks;
 	int count;
 	int sizeOfKey_KB,sizeOfValue_KB;
@@ -59,46 +51,38 @@ public class SimplePutFindGetTestClient {
 	 * @param findChunks = No of chunk for find operation [ count % fundChunk = 0 must be maintained]
 	 */
 
-	public SimplePutFindGetTestClient(int noOfThreads, int sizeOfKey_KB, int sizeOfValue_KB,int count, int findChunks){
-		hz=launchHazelcastInstance();
-		
-		stats = new HashMap<String,Future<Long>>();
-		findStats = new ArrayList<Future<Long>>();
-		taskDuration = new ArrayList<Long>();
+	public SimplePutGetEmbedded(int noOfThreads, int sizeOfKey_KB, int sizeOfValue_KB,int count, int findChunks){
+		try{
+			hz=launchHazelcastInstance();
+			stats = new HashMap<String,Future<Long>>();
+			taskDuration = new ArrayList<Long>();
 
-		map = hz.getMap("ObjectStore");
+			map = hz.getMap("ObjectStore");
 
-		this.findChunks = findChunks;
-		this.count = count;
-		this.noOfThreads=noOfThreads;
-		this.sizeOfValue_KB=sizeOfValue_KB;
-		this.sizeOfKey_KB=sizeOfKey_KB;
+			this.findChunks = findChunks;
+			this.count = count;
+			this.noOfThreads=noOfThreads;
+			this.sizeOfValue_KB=sizeOfValue_KB;
+			this.sizeOfKey_KB=sizeOfKey_KB;
 
-		cdl = new CountDownLatch(count);
-		putTest();
-		printStats(" PUT ");
+			cdl = new CountDownLatch(count);
+			putTest();
+			printStats(" PUT ");
 
-		try {
-			Thread.sleep(5000);
-		} catch (InterruptedException e) {
+			try {
+				Thread.sleep(500);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+
+
+			taskDuration.clear();
+			cdl = new CountDownLatch(count);
+			getTest();
+			printStats(" GET "); 
+		}catch(Exception e){
 			e.printStackTrace();
 		}
-		taskDuration.clear();
-
-		cdl = new CountDownLatch(findChunks);
-		findTest();
-		printStats(" FIND "); 
-
-		try {
-			Thread.sleep(5000);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-
-		taskDuration.clear();
-		cdl = new CountDownLatch(count);
-		getTest();
-		printStats(" GET "); 
 
 		// hz.shutdown();
 	}
@@ -117,7 +101,9 @@ public class SimplePutFindGetTestClient {
 
 		es.shutdown();
 	}
-	
+
+
+
 	private void getTest(){
 		ExecutorService es = Executors.newFixedThreadPool(noOfThreads);
 		for(Entry<String,Future<Long>> e : stats.entrySet()){
@@ -132,60 +118,21 @@ public class SimplePutFindGetTestClient {
 		es.shutdown();
 	}
 
-	private void findTest(){
-		ExecutorService es = Executors.newFixedThreadPool(noOfThreads);
-		List<Set<String>> keySets = Utils.split(stats.keySet(), findChunks);
-		for(Set<String> keys: keySets){
-			Future<Long> f = es.submit(new FindTask(keys));
-			findStats.add(f);
-		}
-		try {
-			cdl.await();
-		} catch (InterruptedException e) {e.printStackTrace();}  
-		es.shutdown();
-	}
-
-	
-
-	private void printStats(String name){
-		long min=900000000l;
+	private void printStats(String name) throws InterruptedException, ExecutionException{
+		long min=0l;
 		long max=0l;
 		long sum=0l;
 		long duration=0l;
 
-		if(name.equals(" FIND ")){
-			for(Future<Long> f : findStats){
-				try {
-					long lat = f.get();
-					if(lat < min) min=lat;
-					if(lat > max) max=lat;
-					sum+=lat;
-				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				} catch (ExecutionException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-			}
 
-
-		}else{
-			for(Entry<String,Future<Long>> e : stats.entrySet()){
-				try {
-					long lat=e.getValue().get();
-					if(lat < min) min=lat;
-					if(lat > max) max=lat;
-					sum+=lat;
-				} catch (InterruptedException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				} catch (ExecutionException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				}			
-			}
+		min=stats.entrySet().iterator().next().getValue().get();
+		for(Entry<String,Future<Long>> e : stats.entrySet()){
+			long lat=e.getValue().get();
+			if(lat < min) min=lat;
+			if(lat > max) max=lat;
+			sum+=lat;
 		}
+
 
 		Collections.sort(this.taskDuration);
 		duration=taskDuration.get(taskDuration.size()-1)-taskDuration.get(0);
@@ -203,19 +150,10 @@ public class SimplePutFindGetTestClient {
 				, max_ms
 				, avgT
 				,(avgT/1000.0)
-				, results.size() > 0?results.size():count
-						, tt_ms
-						,sizeOfKey_KB
-						,sizeOfValue_KB);
-		/*  System.out.printf(name+ ", Min= %f ms , Max= %f ms , Avg= %f ms , Avg= %f s,Count= %d , Total Time = %f ms , Key_Size = %d KB , Value_Size = %d KB \n", min_ms
-	    		                                                                                    , max_ms
-	    		                                                                                    , avgT
-	    		                                                                                    ,(avgT/1000.0)
-	    		                                                                                    , count
-	    		                                                                                    , tt_ms
-	    		                                                                                    ,sizeOfKey_KB
-	    		                                                                                    ,sizeOfValue_KB);*/
-
+				, count
+				, tt_ms
+				,sizeOfKey_KB
+				,sizeOfValue_KB);
 
 	}
 
@@ -224,27 +162,19 @@ public class SimplePutFindGetTestClient {
 	}
 
 	private HazelcastInstance launchHazelcastInstance(){
-		ClientConfig config;
+		Config config;
 		try {
-			XmlClientConfigBuilder xmlcfgb = new XmlClientConfigBuilder("src/main/resource/hazelcast-client.xml");
-			return HazelcastClient.newHazelcastClient(xmlcfgb.build() );
+			config = new FileSystemXmlConfig("src/main/resource/hazelcast-embedded.xml");
+			return Hazelcast.newHazelcastInstance(config);
 		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		return null;
 	}
 
-	/**
-	 * Set parameters here
-	 * new SimplePutFindGetTestClient(NO OF Threads,Size Of Keys(KB),Size Of Value(KB),No of Objects,No of Sets to find in parallel);
-	 * @param args
-	 */
 	public static void main(String[] args) {
-		// TODO Auto-generated method stub
-		            
-		new SimplePutFindGetTestClient(20,1,1,10000,100);
+		new SimplePutGetEmbedded(20,1,1,10000,10);
 	}
 
 	class PutTask implements Callable<Long>{
@@ -281,7 +211,6 @@ public class SimplePutFindGetTestClient {
 			taskDuration.add(t0);
 			taskDuration.add(ret);
 			ret=ret-t0;
-			results.putAll(res);
 			cdl.countDown();
 			return ret;
 		}
@@ -295,7 +224,7 @@ public class SimplePutFindGetTestClient {
 		public Long call() {
 			long ret=0;
 			long t0=System.nanoTime();	 
-			Object val = results.get(key);	
+			Object val = map.get(key);	
 			ret= System.nanoTime();
 			taskDuration.add(t0);
 			taskDuration.add(ret);
@@ -305,11 +234,5 @@ public class SimplePutFindGetTestClient {
 		}
 	}
 
-	/* class PutAllTask implements Runnable{
-   	 public void run() {
-		 // map.set(createValue(1), createValue(1));	
-		}
-    }
 
-     }*/
 }
