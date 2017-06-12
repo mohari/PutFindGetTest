@@ -184,7 +184,7 @@ public class SimplePutGetEmbedded {
 	}
 
 	public static void main(String[] args) {
-		new SimplePutGetEmbedded(20,1,1,10000,10);
+		new SimplePutGetEmbedded(20,1,1,1000,10);
 	}
 
 	class PutTask implements Callable<Long>{

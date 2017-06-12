@@ -1,0 +1,17 @@
+TimeSeries is stored in Hazelcast RingBuffer
+RingBuffer provides  SequenceID which is unique for that RingBuffer
+RingBuffer size is configured in Hazelcast.xml 
+hazelcast-client.xml has the nearcache config
+
+
+Step 0 : start ServerMember.java ... 
+Step1 : Run PutFilterTimeSeries.java .. You can set the no of elements to put here
+Steo2     : Check log file for stats
+
+Step 3 : Filter timeseries data using sequence and or lambda functions  using FilterTimeSeries.java
+Steo 4 : check log for Stats
+
+ReadCount vs Result Size 
+
+ReadCount  is the no of records fetched from RingBuffer 
+ResultSize  is the size of the actual result after fitering against any lambda function or filter function

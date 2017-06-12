@@ -8,6 +8,11 @@
         </join>
     </network>
 
+     <ringbuffer name="rb">
+        <capacity>10000</capacity>
+        <!--  <time-to-live-seconds>5</time-to-live-seconds>   -->
+    </ringbuffer>
+    
     <map name="personsWithIndex">
         <indexes>
             <index ordered="false">name</index>
