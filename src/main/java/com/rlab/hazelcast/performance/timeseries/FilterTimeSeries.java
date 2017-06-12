@@ -43,7 +43,6 @@ public class FilterTimeSeries {
 
 	Ringbuffer<TimeSeriesObject> rb;
 
-	HashMap<String, Future<Long>> stats;
 	List<Future<FilterResultInfo>> findStats;
 	CountDownLatch cdl;
 
@@ -67,7 +66,6 @@ public class FilterTimeSeries {
 	public FilterTimeSeries(int noOfThreads, int sizeOfKey_KB, int count) {
 		try {
 			hz = launchHazelcastInstance();
-			stats = new HashMap<String, Future<Long>>();
 			findStats = new ArrayList<Future<FilterResultInfo>>();
 
 			// configure in xml file
@@ -85,27 +83,30 @@ public class FilterTimeSeries {
 	}
 
 	public void filterTest(int startSeq, int range,IFunction<TimeSeriesObject,Boolean> filterFunction) throws InterruptedException, ExecutionException {
+		findStats.clear();
 		int noOf_K_Batches = range/1000;
 		int lastBatchSize = range % 1000;
 		cdl =new CountDownLatch(noOf_K_Batches+((lastBatchSize>0)?1:0));
 		ExecutorService es = Executors.newFixedThreadPool(this.noOfThreads);
 		for (int i=0;i<= noOf_K_Batches;i++){
-			Future<FilterResultInfo> f;
+			Future<FilterResultInfo> f=null;
 			if(i==noOf_K_Batches && lastBatchSize > 0){
 				 f = es.submit(new FilterTask(startSeq+(i*1000),lastBatchSize,filterFunction));
-			}else{
+				 
+			}else if (i < noOf_K_Batches){
 			     f = es.submit(new FilterTask(startSeq+(i*1000),1000,filterFunction));
 			}
+			if(f != null)
 			findStats.add(f);
 		}
 		
 		cdl.await();
 				
 		es.shutdown();
-		printStats(true);
+		printStats(false,range);
 	}
 
-	private void printStats(boolean print) throws InterruptedException, ExecutionException {
+	private void printStats(boolean print,int range) throws InterruptedException, ExecutionException {
 
 		int readCount = 0;
 		long duration = 0l;
@@ -120,10 +121,10 @@ public class FilterTimeSeries {
 		}
 		
 		double tt_ms = duration / 1000000.0;
-		double avgT = ((double) tt_ms) / readCount;
+		double avgT = ((double) tt_ms) / range;
 
-		System.out.println("OP, AvgT(ms), AvgT(s),  Total Time(ms), Total Read Count, Key(KB)");
-		System.out.printf("FILTER" + ",%f,%f,%f,%d,%d \n", avgT, (avgT / 1000.0), tt_ms, readCount,
+		System.out.println("OP, AvgT(ms), AvgT(s),  Total Time(ms), Range,Total Read Count, Key(KB)");
+		System.out.printf("FILTER" + ",%f,%f,%f,%d,%d,%d \n", avgT, (avgT / 1000.0), tt_ms, range,readCount,
 				sizeOfKey_KB);
 	}
 	
@@ -186,18 +187,22 @@ public class FilterTimeSeries {
 
 		public FilterResultInfo call() throws InterruptedException, ExecutionException {
 			Thread.sleep(500);
+			try{
 			long ret = 0;
 			System.out.println("Filter start ::  Buffer size " + rb.size() + "  head: " + rb.headSequence() + "tail: "
-					+ rb.tailSequence()+" filterStartSeq "+this.startSeq+" filterRange"+this.range);
+					+ rb.tailSequence()+" filterStartSeq "+this.startSeq+" filterRange "+this.range);
 			long t0 = System.nanoTime();
 			ICompletableFuture<ReadResultSet<TimeSeriesObject>> f = rb.readManyAsync(startSeq, 0, range,
 					filterFunction);
 			ret = System.nanoTime() - t0;
 			ReadResultSet<TimeSeriesObject> rs = f.get();
-			 cdl.countDown();
+			 
 			FilterResultInfo fri = new FilterResultInfo(ret, rs.readCount());
 			fri.rs=rs;
 			return fri;
+			}finally{
+				cdl.countDown();
+			}
 		}
 
 	}
